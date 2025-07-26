@@ -1,6 +1,8 @@
 package tview
 
 import (
+	"sync"
+
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -17,6 +19,9 @@ const (
 
 // TreeNode represents one node in a tree view.
 type TreeNode struct {
+	// Mutex to prevent race conditions.
+	mu sync.RWMutex
+
 	// The reference object.
 	reference interface{}
 
@@ -73,6 +78,9 @@ func NewTreeNode(text string) *TreeNode {
 // The callback returns whether traversal should continue with the traversed
 // node's child nodes (true) or not recurse any deeper (false).
 func (n *TreeNode) Walk(callback func(node, parent *TreeNode) bool) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.parent = nil
 	nodes := []*TreeNode{n}
 	for len(nodes) > 0 {
@@ -98,39 +106,60 @@ func (n *TreeNode) Walk(callback func(node, parent *TreeNode) bool) *TreeNode {
 // will allow you to establish a mapping between the TreeView hierarchy and your
 // internal tree structure.
 func (n *TreeNode) SetReference(reference interface{}) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.reference = reference
 	return n
 }
 
 // GetReference returns this node's reference object.
 func (n *TreeNode) GetReference() interface{} {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	return n.reference
 }
 
 // SetChildren sets this node's child nodes.
 func (n *TreeNode) SetChildren(childNodes []*TreeNode) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.children = childNodes
 	return n
 }
 
 // GetText returns this node's text.
 func (n *TreeNode) GetText() string {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	return n.text
 }
 
 // GetChildren returns this node's children.
 func (n *TreeNode) GetChildren() []*TreeNode {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	return n.children
 }
 
 // ClearChildren removes all child nodes from this node.
 func (n *TreeNode) ClearChildren() *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.children = nil
 	return n
 }
 
 // AddChild adds a new child node to this node.
 func (n *TreeNode) AddChild(node *TreeNode) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.children = append(n.children, node)
 	return n
 }
@@ -138,6 +167,9 @@ func (n *TreeNode) AddChild(node *TreeNode) *TreeNode {
 // RemoveChild removes a child node from this node. If the child node cannot be
 // found, nothing happens.
 func (n *TreeNode) RemoveChild(node *TreeNode) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	for index, child := range n.children {
 		if child == node {
 			n.children = append(n.children[:index], n.children[index+1:]...)
@@ -150,6 +182,9 @@ func (n *TreeNode) RemoveChild(node *TreeNode) *TreeNode {
 // SetSelectable sets a flag indicating whether this node can be selected by
 // the user.
 func (n *TreeNode) SetSelectable(selectable bool) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.selectable = selectable
 	return n
 }
@@ -157,24 +192,36 @@ func (n *TreeNode) SetSelectable(selectable bool) *TreeNode {
 // SetSelectedFunc sets a function which is called when the user selects this
 // node by hitting Enter when it is selected.
 func (n *TreeNode) SetSelectedFunc(handler func()) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.selected = handler
 	return n
 }
 
 // SetExpanded sets whether or not this node's child nodes should be displayed.
 func (n *TreeNode) SetExpanded(expanded bool) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.expanded = expanded
 	return n
 }
 
 // Expand makes the child nodes of this node appear.
 func (n *TreeNode) Expand() *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.expanded = true
 	return n
 }
 
 // Collapse makes the child nodes of this node disappear.
 func (n *TreeNode) Collapse() *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.expanded = false
 	return n
 }
@@ -182,7 +229,7 @@ func (n *TreeNode) Collapse() *TreeNode {
 // ExpandAll expands this node and all descendent nodes.
 func (n *TreeNode) ExpandAll() *TreeNode {
 	n.Walk(func(node, parent *TreeNode) bool {
-		node.expanded = true
+		node.Expand()
 		return true
 	})
 	return n
@@ -191,7 +238,7 @@ func (n *TreeNode) ExpandAll() *TreeNode {
 // CollapseAll collapses this node and all descendent nodes.
 func (n *TreeNode) CollapseAll() *TreeNode {
 	n.Walk(func(node, parent *TreeNode) bool {
-		node.expanded = false
+		node.Collapse()
 		return true
 	})
 	return n
@@ -199,17 +246,26 @@ func (n *TreeNode) CollapseAll() *TreeNode {
 
 // IsExpanded returns whether the child nodes of this node are visible.
 func (n *TreeNode) IsExpanded() bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	return n.expanded
 }
 
 // SetText sets the node's text which is displayed.
 func (n *TreeNode) SetText(text string) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.text = text
 	return n
 }
 
 // GetColor returns the node's text color.
 func (n *TreeNode) GetColor() tcell.Color {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	color, _, _ := n.textStyle.Decompose()
 	return color
 }
@@ -218,6 +274,9 @@ func (n *TreeNode) GetColor() tcell.Color {
 // sets the background color of the selected text style. For more control over
 // styles, use [TreeNode.SetTextStyle] and [TreeNode.SetSelectedTextStyle].
 func (n *TreeNode) SetColor(color tcell.Color) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.textStyle = n.textStyle.Foreground(color)
 	n.selectedTextStyle = n.selectedTextStyle.Background(color)
 	return n
@@ -225,17 +284,26 @@ func (n *TreeNode) SetColor(color tcell.Color) *TreeNode {
 
 // SetTextStyle sets the text style for this node.
 func (n *TreeNode) SetTextStyle(style tcell.Style) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.textStyle = style
 	return n
 }
 
 // GetTextStyle returns the text style for this node.
 func (n *TreeNode) GetTextStyle() tcell.Style {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	return n.textStyle
 }
 
 // SetSelectedTextStyle sets the text style for this node when it is selected.
 func (n *TreeNode) SetSelectedTextStyle(style tcell.Style) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.selectedTextStyle = style
 	return n
 }
@@ -243,6 +311,9 @@ func (n *TreeNode) SetSelectedTextStyle(style tcell.Style) *TreeNode {
 // GetSelectedTextStyle returns the text style for this node when it is
 // selected.
 func (n *TreeNode) GetSelectedTextStyle() tcell.Style {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	return n.selectedTextStyle
 }
 
@@ -250,6 +321,9 @@ func (n *TreeNode) GetSelectedTextStyle() tcell.Style {
 // keeps the text as far left as possible with a minimum of line graphics. Any
 // value greater than that moves the text to the right.
 func (n *TreeNode) SetIndent(indent int) *TreeNode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.indent = indent
 	return n
 }
@@ -259,6 +333,9 @@ func (n *TreeNode) SetIndent(indent int) *TreeNode {
 // guaranteed to be up to date immediately after the tree that contains this
 // node is drawn.
 func (n *TreeNode) GetLevel() int {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
 	return n.level
 }
 
@@ -736,6 +813,7 @@ func (t *TreeView) Draw(screen tcell.Screen) {
 			continue
 		}
 
+		node.mu.RLock()
 		// Draw the graphics.
 		if t.graphics {
 			// Draw ancestor branches.
@@ -790,6 +868,7 @@ func (t *TreeView) Draw(screen tcell.Screen) {
 				printWithStyle(screen, node.text, x+node.textX+prefixWidth, posY, 0, width-node.textX-prefixWidth, AlignLeft, style, false)
 			}
 		}
+		node.mu.RUnlock()
 
 		// Advance.
 		posY++
